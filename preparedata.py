@@ -6,6 +6,8 @@ import numpy as np
 import codecs
 import collections
 import re
+MAX_SIZE=100
+PAD='ה'
 punctation_regex=re.compile('''[.,?!;']''')
 parser = argparse.ArgumentParser()
 parser.add_argument('--input_file', type=str,
@@ -33,9 +35,12 @@ def prepare_dataset(args):
 
 
     with open(args.input_file,'r',encoding='utf-8') as f:
-        target = f.read()
-    source = re.sub(punctation_regex,'',target) #Strip away punctuation
-    
+        target = f.readlines()
+        target = list(map(lambda x:x.strip()[:MAX_SIZE].ljust(MAX_SIZE,PAD),target))
+
+    source = list(map(lambda x:re.sub(punctation_regex,'',x).ljust(MAX_SIZE,PAD),target)) #Strip away punctuation
+
+
     
     
     target_vocab = make_vocabulary(target, vocab_file_target)
@@ -47,7 +52,10 @@ def prepare_dataset(args):
 
 
 def make_data_tensors(args, vocab, txt, test_file, train_file, val_file):
-    data_tensor = np.array(list(map(vocab.get, txt)))
+    id_lines=[]
+    for line in txt:
+        id_lines.append(np.array(list(map(vocab.get,line))))
+    data_tensor = np.array(id_lines)
     data_size = data_tensor.shape[0]
     val_size = int(args.val_frac * data_size)
     test_size = int(args.test_frac * data_size)
@@ -58,6 +66,7 @@ def make_data_tensors(args, vocab, txt, test_file, train_file, val_file):
 
 
 def make_vocabulary(txt, vocab_file):
+    txt =''.join(txt)
     counter = collections.Counter(txt)
     counts = sorted(counter.items(), key=lambda x: -x[1])
     tokens, _ = zip(*counts)
