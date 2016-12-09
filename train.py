@@ -66,7 +66,8 @@ def train(args):
 
     with tf.Session() as sess:
         tf.initialize_all_variables().run()
-        summary_writer = tf.train.SummaryWriter('./logs', graph=tf.get_default_graph())
+        summary_writer = tf.train.SummaryWriter('./logs/3', graph=tf.get_default_graph())
+        val_summary_writer = tf.train.SummaryWriter('./logs/3/val', graph=tf.get_default_graph())
 
         saver = tf.train.Saver(tf.all_variables())
 
@@ -84,7 +85,7 @@ def train(args):
                 global_step = e * loader.train.num_batches + b
                 start = time.time()
                 feed = {model.inputs: x,
-                        model.targets: x,
+                        model.targets: y,
                         #model.dropout: args.dropout, TODO add dropout
                         }
                 train_loss, train, summaries= sess.run([model.total_loss, model.train_op,model.summaries], feed)
@@ -96,25 +97,31 @@ def train(args):
                             args.num_epochs * loader.train.num_batches,
                             e, train_loss, end - start))
 
-                if  False and (global_step % args.save_every == 0 \
+                if  (global_step >1) and (global_step % args.save_every == 0 \
                     or (e == args.num_epochs - 1 and b == loader.train.num_batches - 1)):
                     all_loss = 0
-                    val_state = sess.run(model.zero_state)
-                    start = time.time()
 
-                    for b, (x, y) in enumerate(loader.val):
-                        feed = {model.input: x,
-                                model.target: y}
-                        batch_loss, val_state = sess.run([model.batch_loss, model.train_op], feed)
-                        all_loss += batch_loss
 
-                    end = time.time()
-                    val_loss = all_loss / loader.val.num_batches
-                    print("val_loss = {:.3f}, time/val = {:.3f}".format(val_loss, end - start))
-                    checkpoint_path = os.path.join(args.save_dir, 'iter_{}-val_{:.3f}.ckpt' \
-                                        .format(global_step, val_loss))
+                    checkpoint_path = os.path.join(args.save_dir, 'iter_{}-.ckpt' \
+                                        .format(global_step, ))
                     saver.save(sess, checkpoint_path)
                     print("model saved to {}".format(checkpoint_path))
+        val_loss = run_validation(all_loss, global_step, loader, model, sess, start, val_summary_writer)
+
+
+def run_validation(all_loss, global_step, loader, model, sess, start, val_summary_writer):
+    for b, (x, y) in enumerate(loader.val):
+        feed = {model.inputs: x,
+                model.targets: y}
+        val_loss,  val_summaries = sess.run([model.total_loss,  model.summaries],
+                                                feed)
+        val_summary_writer.add_summary(val_summaries, global_step=global_step + b)
+        all_loss += val_loss
+    end = time.time()
+    val_loss = all_loss / loader.val.num_batches
+    print("val_loss = {:.3f}, time/val = {:.3f}".format(val_loss, end - start))
+    return val_loss
+
 
 def get_train_args():
     parser = argparse.ArgumentParser()
@@ -129,13 +136,13 @@ def get_train_args():
     parser.add_argument('--num_epochs', type=int,
                         default=128, help="number of epochs to train")
     parser.add_argument('--batch_size', type=int,
-                        default=100, help="minibatch size")
+                        default=10  , help="minibatch size")
     parser.add_argument('--vocab_size', type=int,
                         default=None, help="vocabulary size, defaults to infer from the input")
     parser.add_argument('--seq_length', type=int,
                         default=64, help="sequence length")
     parser.add_argument('--learning_rate', type=float,
-                        default=0.002, help="learning rate")
+                        default=0.0008, help="learning rate")
     parser.add_argument('--decay_factor', type=float,
                         default=0.97, help="learning rate decay factor")
     parser.add_argument('--decay_every', type=int,
@@ -143,11 +150,11 @@ def get_train_args():
     parser.add_argument('--grad_clip', type=float,
                         default=5, help="maximum value for gradients, set to 0 to remove gradient clipping")
     parser.add_argument('--hidden_size', type=int,
-                        default=32, help="size of hidden units in network")
+                        default=100, help="size of hidden units in network")
     parser.add_argument('--num_layers', type=int,
-                        default=1, help="number of hidden layers in network")
+                        default=2, help="number of hidden layers in network")
     parser.add_argument('--dropout', type=float,
-                        default=0.9, help="dropout keep probability applied to input between lstm layers")
+                        default=0.7, help="dropout keep probability applied to input between lstm layers")
     parser.add_argument('--verbose', action='store_true',
                         help="verbose printing")
     args = parser.parse_args()

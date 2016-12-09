@@ -6,9 +6,10 @@ import numpy as np
 import codecs
 import collections
 import re
-MAX_SIZE=100
+MAX_SIZE=50
 PAD='ה'
 punctation_regex=re.compile('''[.,?!;']''')
+non_punctation_regex=re.compile('''[^.,?!;']''')
 parser = argparse.ArgumentParser()
 parser.add_argument('--input_file', type=str,
                     default='data/wikipedia/input.txt', help="data file in utf-8")
@@ -36,9 +37,9 @@ def prepare_dataset(args):
 
     with open(args.input_file,'r',encoding='utf-8') as f:
         target = f.readlines()
-        target = list(map(lambda x:x.strip()[:MAX_SIZE].ljust(MAX_SIZE,PAD),target))
+        source = list(map(lambda x:x.strip()[:MAX_SIZE].ljust(MAX_SIZE,PAD),target))
 
-    source = list(map(lambda x:re.sub(punctation_regex,'',x).ljust(MAX_SIZE,PAD),target)) #Strip away punctuation
+    target = list(map(lambda x:re.sub(non_punctation_regex,'c',x)[:MAX_SIZE].ljust(MAX_SIZE,PAD),target)) #Strip away punctuation
 
 
     

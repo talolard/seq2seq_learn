@@ -3,19 +3,23 @@ from math import sqrt
 
 import tensorflow as tf
 from tensorflow.contrib.learn.python.learn.ops import array_ops
+from tensorflow.contrib.rnn.python.ops.rnn_cell import AttentionCellWrapper
 from tensorflow.python.ops import rnn_cell, seq2seq
 from tensorflow.python.ops.rnn import bidirectional_rnn
 import tensorflow.contrib.rnn
+from tensorflow.python.ops.rnn_cell import DropoutWrapper
 from tensorflow.python.ops.seq2seq import sequence_loss_by_example
 from tensorflow.python.training.adam import AdamOptimizer
 
 
-def LSTM_factory(hidden_size,num_layers):
+def LSTM_factory(hidden_size,num_layers,dropout):
+    DropoutWrapper
     cell = rnn_cell.LSTMCell(num_units=hidden_size,
                                   state_is_tuple=True,
                                   activation=tf.tanh,
                                 initializer=tf.contrib.layers.xavier_initializer()
                                   )
+    cell =DropoutWrapper(cell=cell,input_keep_prob=dropout,output_keep_prob=dropout)
     stacked_cells = rnn_cell.MultiRNNCell(cells=[cell]*num_layers) #TODO change 3 to arg.num_layers
     return stacked_cells
 
@@ -30,17 +34,19 @@ class Model():
                                         initializer=tf.contrib.layers.xavier_initializer()
                                         )
             embedded = tf.nn.embedding_lookup(embedding, self.inputs)
-            embedded_inputs = tf.unpack(embedded, axis=1)
+            embedded_inputs = tf.unpack(embedded, axis=0)
 
-        with tf.variable_scope("bidi_rnn"):
-            cell = LSTM_factory(args.hidden_size,args.num_layers)
+        with tf.variable_scope("bidi_rnn") as bidi_scope:
+            cell = LSTM_factory(args.hidden_size,args.num_layers,dropout=args.dropout)
             outputs,fwd_state,bwd_state= tf.nn.bidirectional_rnn(cell_fw=cell,
                                                             cell_bw=cell,
-                                              inputs=embedded_inputs,
-                                              dtype=tf.float32)
+                                                            inputs=embedded_inputs,
+                                                            dtype=tf.float32)
 
         with tf.variable_scope("decoder_rnn"):
-            final_outputs,state = tf.nn.rnn(cell=cell,inputs=outputs,dtype=tf.float32)
+             decoder_cell = LSTM_factory(args.hidden_size, args.num_layers*2,dropout=args.dropout)
+             decoder_cell = AttentionCellWrapper(cell=decoder_cell,attn_length=args.hidden_size,state_is_tuple=True)
+             final_outputs,state = tf.nn.rnn(cell=decoder_cell,inputs=outputs,dtype=tf.float32)
 
         with tf.variable_scope("logits") as logits_scope:
             logits = tf.contrib.layers.fully_connected(
@@ -64,8 +70,7 @@ class Model():
             # Add summaries.
             tf.scalar_summary("batch_loss", batch_loss)
             tf.scalar_summary("total_loss", total_loss)
-            for var in tf.trainable_variables():
-                tf.histogram_summary(var.op.name, var)
+
 
             self.total_loss = total_loss
             self.batch_loss = batch_loss
@@ -73,9 +78,20 @@ class Model():
 
         with tf.name_scope("optimization"):
             opt = AdamOptimizer(learning_rate=args.learning_rate)
-            train_op = opt.minimize(self.batch_loss)
+            gvs = opt.compute_gradients(self.batch_loss)
+            capped_gvs = [(tf.clip_by_value(grad, -1., 1.), var) for grad, var in gvs]
+            train_op = opt.apply_gradients(capped_gvs)
+
+        for var in tf.trainable_variables():
+            tf.histogram_summary(var.op.name, var)
 
 
+
+        for grad, var in gvs:
+
+            if grad is not None:
+                print(capped_gvs)
+                tf.histogram_summary(var.op.name + '/gradients', grad,)
 
         with tf.name_scope("tensors"):
             self.train_op = train_op
