@@ -49,12 +49,17 @@ class Model():
              final_outputs,state = tf.nn.rnn(cell=decoder_cell,inputs=outputs,dtype=tf.float32)
 
         with tf.variable_scope("logits") as logits_scope:
+            # Reshaping to apply the same weights over the timesteps
+            outputs = tf.reshape(final_outputs, [-1, args.hidden_size])
+
             logits = tf.contrib.layers.fully_connected(
-                inputs=final_outputs,
+                inputs=outputs,
                 num_outputs=args.vocab_target_size,
                 activation_fn=None,
                 weights_initializer=tf.contrib.layers.xavier_initializer(),
                 scope=logits_scope)
+            logits = tf.reshape(logits, [args.batch_size, -1, args.vocab_target_size])
+
             self.logits =logits
 
         with tf.variable_scope("loss"):
