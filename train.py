@@ -66,8 +66,8 @@ def train(args):
 
     with tf.Session() as sess:
         tf.initialize_all_variables().run()
-        summary_writer = tf.train.SummaryWriter('./logs/3', graph=tf.get_default_graph())
-        val_summary_writer = tf.train.SummaryWriter('./logs/3/val', graph=tf.get_default_graph())
+        summary_writer = tf.train.SummaryWriter('./logs/7', graph=tf.get_default_graph())
+        val_summary_writer = tf.train.SummaryWriter('./logs/7/val', graph=tf.get_default_graph())
 
         saver = tf.train.Saver(tf.all_variables())
 
@@ -150,7 +150,7 @@ def get_train_args():
     parser.add_argument('--grad_clip', type=float,
                         default=5, help="maximum value for gradients, set to 0 to remove gradient clipping")
     parser.add_argument('--hidden_size', type=int,
-                        default=100, help="size of hidden units in network")
+                        default=200, help="size of hidden units in network")
     parser.add_argument('--num_layers', type=int,
                         default=2, help="number of hidden layers in network")
     parser.add_argument('--dropout', type=float,

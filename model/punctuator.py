@@ -34,13 +34,21 @@ class Model():
                                         initializer=tf.contrib.layers.xavier_initializer()
                                         )
             embedded = tf.nn.embedding_lookup(embedding, self.inputs)
+            #tensor of shape [batch_size*sequence_length*embedding_size]
             embedded_inputs = tf.unpack(embedded, axis=0)
+            #assert embedded_inputs[0].get_shape() == (args.batch_size,args.sequence_length,embedding_size)
+
+            #reshape it to a list of timesteps
+            embedded_inputs_by_timestamp = [tf.reshape(i, (args.batch_size, embedding_size)) for i in tf.split(1, args.sequence_length, embedded)]
+            assert len(embedded_inputs_by_timestamp) ==args.sequence_length
+            for timestep in embedded_inputs_by_timestamp:
+                assert timestep.get_shape() == (args.batch_size,embedding_size)
 
         with tf.variable_scope("bidi_rnn") as bidi_scope:
             cell = LSTM_factory(args.hidden_size,args.num_layers,dropout=args.dropout)
             outputs,fwd_state,bwd_state= tf.nn.bidirectional_rnn(cell_fw=cell,
                                                             cell_bw=cell,
-                                                            inputs=embedded_inputs,
+                                                            inputs=embedded_inputs_by_timestamp,
                                                             dtype=tf.float32)
 
         with tf.variable_scope("decoder_rnn"):
@@ -50,7 +58,8 @@ class Model():
 
         with tf.variable_scope("logits") as logits_scope:
             # Reshaping to apply the same weights over the timesteps
-            outputs = tf.reshape(final_outputs, [-1, args.hidden_size])
+            outputs = tf.pack(final_outputs)
+            outputs = tf.transpose(outputs, [1, 0, 2])
 
             logits = tf.contrib.layers.fully_connected(
                 inputs=outputs,
@@ -58,15 +67,14 @@ class Model():
                 activation_fn=None,
                 weights_initializer=tf.contrib.layers.xavier_initializer(),
                 scope=logits_scope)
-            logits = tf.reshape(logits, [args.batch_size, -1, args.vocab_target_size])
 
             self.logits =logits
 
         with tf.variable_scope("loss"):
-            flat_targets = tf.reshape(self.targets, [-1])
-            flat_logits = tf.reshape(logits, [-1, args.vocab_target_size])
-            # Compute losses.
-            losses = tf.nn.sparse_softmax_cross_entropy_with_logits(flat_logits, flat_targets)
+            #flat_targets = tf.reshape(self.targets, [-1])
+            #flat_logits = tf.reshape(logits, [-1, args.vocab_target_size])
+            assert logits.get_shape()[:-1]==self.targets.get_shape(), 'l = {0} t = {1}'.format(logits.get_shape(),self.targets.get_shape())
+            losses = tf.nn.sparse_softmax_cross_entropy_with_logits(logits, self.targets)
 
             batch_loss = tf.reduce_sum(losses,name="batch_loss")
             tf.contrib.losses.add_loss(batch_loss)
